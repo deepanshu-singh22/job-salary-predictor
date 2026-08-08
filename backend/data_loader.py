@@ -1,6 +1,6 @@
 """
-Loads and cleans the jobs dataset, handling malformed/quoted CSV lines,
-and exposes helper functions for skills analysis.
+Loads and cleans the jobs dataset efficiently without exceeding Render's 512MB RAM limit,
+handling malformed/quoted CSV lines, and exposing optimized helper functions for skills analysis.
 """
 
 import time
@@ -9,11 +9,21 @@ import re
 import pandas as pd
 import numpy as np
 from collections import Counter
+from functools import lru_cache
+from itertools import combinations
+from pyvis.network import Network
 
 import config
 from config import ROLE_SKILLS_DATA_PATH
 
 _cache = {"df": None, "loaded_at": 0}
+
+# 💡 Zaroori Columns Definition (Memory bachat ke liye)
+USE_COLS = [
+    "jobId", "job_id", "title", "job_title_normalized", "company_name", 
+    "salary_avg", "minimumSalary", "maximumSalary", "salary_min", "salary_max",
+    "location", "skills", "tagsAndSkills"
+]
 
 
 def clean_skill_string(text: str) -> str:
@@ -48,14 +58,25 @@ def _load_and_clean() -> pd.DataFrame:
     
     df = pd.DataFrame(data, columns=header)
 
+    # Column Renaming
     df = df.rename(columns=config.COLUMNS)
     if "tagsAndSkills" in df.columns and "skills" not in df.columns:
         df = df.rename(columns={"tagsAndSkills": "skills"})
+
+    # 🚀 Memory Optimization 1: Keep only useful columns
+    existing_cols = [c for c in USE_COLS if c in df.columns]
+    if existing_cols:
+        df = df[existing_cols]
 
     if "skills" in df.columns:
         df = df[df["skills"].notna()]
         df["skills"] = df["skills"].astype(str).str.strip()
         df = df[(df["skills"] != "") & (df["skills"].str.lower() != "nan")]
+
+    # 🚀 Memory Optimization 2: Optimize Numeric Data Types
+    for sal_col in ['salary_avg', 'minimumSalary', 'maximumSalary', 'salary_min', 'salary_max']:
+        if sal_col in df.columns:
+            df[sal_col] = pd.to_numeric(df[sal_col], errors='coerce').fillna(0).astype(np.float32)
 
     return df.reset_index(drop=True)
 
@@ -73,44 +94,42 @@ def get_df(force_reload: bool = False) -> pd.DataFrame:
     return _cache["df"]
 
 
+@lru_cache(maxsize=1)
 def get_skill_counts() -> pd.DataFrame:
-    """Returns top overall skills (cleaned from HTML and long sentences)."""
+    """Returns top overall skills (Cached in RAM for high performance)."""
     df = get_df()
 
     if "skills" not in df.columns or df["skills"].empty:
         return pd.DataFrame(columns=["skill_name", "frequency_count", "percentage_of_jobs", "rank"])
 
-    exploded = (
-        df["skills"]
-        .dropna()
-        .astype(str)
-        .apply(clean_skill_string)
-        .str.split(r"[,;|\n\r\t]")
-        .explode()
-        .str.strip()
-    )
-    
-    exploded = exploded[
-        (exploded != "") 
-        & (exploded.str.lower() != "nan")
-        & (exploded.str.len() <= 35)
-        & (exploded.str.len() >= 2)
-    ]
+    # Fast processing using memory generator
+    skill_counts = Counter()
+    skill_display_map = {}
+    total_jobs = len(df)
 
-    if exploded.empty:
+    for skills_str in df["skills"].dropna():
+        cleaned = clean_skill_string(str(skills_str))
+        tokens = [s.strip() for s in re.split(r"[,;|\n\r\t]", cleaned) if s.strip()]
+        for token in tokens:
+            if 2 <= len(token) <= 35 and token.lower() != "nan":
+                key = token.lower()
+                skill_counts[key] += 1
+                if key not in skill_display_map:
+                    skill_display_map[key] = token
+
+    if not skill_counts:
         return pd.DataFrame(columns=["skill_name", "frequency_count", "percentage_of_jobs", "rank"])
 
-    temp = pd.DataFrame({"raw_skill": exploded, "skill_key": exploded.str.lower()})
-    display_names = temp.groupby("skill_key")["raw_skill"].agg(
-        lambda x: x.value_counts().idxmax()
-    )
+    counts_data = []
+    for key, count in skill_counts.most_common():
+        counts_data.append({
+            "skill_key": key,
+            "skill_name": skill_display_map[key],
+            "frequency_count": count,
+            "percentage_of_jobs": round((count / total_jobs) * 100, 2)
+        })
 
-    total_jobs = len(df)
-    counts = temp["skill_key"].value_counts().reset_index()
-    counts.columns = ["skill_key", "frequency_count"]
-
-    counts["skill_name"] = counts["skill_key"].map(display_names)
-    counts["percentage_of_jobs"] = (counts["frequency_count"] / total_jobs * 100).round(2)
+    counts = pd.DataFrame(counts_data)
     counts["rank"] = range(1, len(counts) + 1)
 
     return counts[["skill_name", "frequency_count", "percentage_of_jobs", "rank"]]
@@ -144,55 +163,46 @@ def get_skills_by_job_role(job_role: str, top_n: int = 10) -> pd.DataFrame:
             "rank", "skill_name", "count_in_role", "percentage_demand_in_role", "job_role_selected"
         ])
 
-    exploded = (
-        role_df["skills"]
-        .dropna()
-        .astype(str)
-        .apply(clean_skill_string)
-        .str.split(r"[,;|\n\r\t]")
-        .explode()
-        .str.strip()
-    )
-    
-    exploded = exploded[
-        (exploded != "") 
-        & (exploded.str.lower() != "nan")
-        & (exploded.str.len() <= 35)
-        & (exploded.str.len() >= 2)
-    ]
+    skill_counts = Counter()
+    skill_display_map = {}
 
-    if exploded.empty:
+    for skills_str in role_df["skills"].dropna():
+        cleaned = clean_skill_string(str(skills_str))
+        tokens = [s.strip() for s in re.split(r"[,;|\n\r\t]", cleaned) if s.strip()]
+        for token in tokens:
+            if 2 <= len(token) <= 35 and token.lower() != "nan":
+                key = token.lower()
+                skill_counts[key] += 1
+                if key not in skill_display_map:
+                    skill_display_map[key] = token
+
+    if not skill_counts:
         return pd.DataFrame(columns=[
             "rank", "skill_name", "count_in_role", "percentage_demand_in_role", "job_role_selected"
         ])
 
-    temp = pd.DataFrame({"raw_skill": exploded, "skill_key": exploded.str.lower()})
-    display_names = temp.groupby("skill_key")["raw_skill"].agg(
-        lambda x: x.value_counts().idxmax()
-    )
+    top_skills = skill_counts.most_common(top_n)
+    counts_data = []
 
-    counts = temp["skill_key"].value_counts().head(top_n).reset_index()
-    counts.columns = ["skill_key", "count_in_role"]
+    for idx, (key, count) in enumerate(top_skills, 1):
+        counts_data.append({
+            "rank": idx,
+            "skill_name": skill_display_map[key],
+            "count_in_role": count,
+            "percentage_demand_in_role": round((count / total_role_jobs) * 100, 1),
+            "job_role_selected": job_role
+        })
 
-    counts["rank"] = range(1, len(counts) + 1)
-    counts["skill_name"] = counts["skill_key"].map(display_names)
-    counts["percentage_demand_in_role"] = ((counts["count_in_role"] / total_role_jobs) * 100).round(1)
-    counts["job_role_selected"] = job_role
-
-    return counts[["rank", "skill_name", "count_in_role", "percentage_demand_in_role", "job_role_selected"]]
+    return pd.DataFrame(counts_data)
 
 
+@lru_cache(maxsize=1)
 def get_top_hiring_locations(top_n=20) -> pd.DataFrame:
-    """Calculates top hiring locations with salary metrics & dominant skills."""
-    try:
-        df = pd.read_csv(ROLE_SKILLS_DATA_PATH, low_memory=False)
-    except Exception as e:
-        print(f"Error loading CSV: {e}")
-        return pd.DataFrame()
+    """Calculates top hiring locations with salary metrics & dominant skills (Uses cached get_df)."""
+    df = get_df()
 
-    for col in ['salary_avg', 'minimumSalary', 'maximumSalary']:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    if df.empty or 'location' not in df.columns:
+        return pd.DataFrame()
 
     def extract_primary_city(loc_str):
         if not isinstance(loc_str, str) or not loc_str.strip():
@@ -201,11 +211,9 @@ def get_top_hiring_locations(top_n=20) -> pd.DataFrame:
         first_part = re.sub(r'^(Hybrid|Remote)\s*-\s*', '', first_part, flags=re.IGNORECASE).strip()
         return first_part if first_part else "Unknown"
 
-    if 'location' not in df.columns:
-        return pd.DataFrame()
-
-    df['city'] = df['location'].apply(extract_primary_city)
-    df_filtered = df[~df['city'].isin(["Remote", "Unknown", "Other", ""])]
+    df_temp = df.copy()
+    df_temp['city'] = df_temp['location'].apply(extract_primary_city)
+    df_filtered = df_temp[~df_temp['city'].isin(["Remote", "Unknown", "Other", ""])]
 
     def get_top_skills(skills_series, top_k=3):
         skills_list = []
@@ -225,13 +233,16 @@ def get_top_hiring_locations(top_n=20) -> pd.DataFrame:
         avg_salary = valid_salaries.mean() if not valid_salaries.empty else 0
         median_salary = valid_salaries.median() if not valid_salaries.empty else 0
         
-        min_sal = group[group['minimumSalary'] > 0]['minimumSalary'].min() if 'minimumSalary' in group.columns else 0
+        min_col = 'minimumSalary' if 'minimumSalary' in group.columns else ('salary_min' if 'salary_min' in group.columns else None)
+        max_col = 'maximumSalary' if 'maximumSalary' in group.columns else ('salary_max' if 'salary_max' in group.columns else None)
+
+        min_sal = group[group[min_col] > 0][min_col].min() if min_col else 0
         min_sal = min_sal if not (pd.isna(min_sal) or np.isnan(min_sal)) else 0
         
-        max_sal = group[group['maximumSalary'] > 0]['maximumSalary'].max() if 'maximumSalary' in group.columns else 0
+        max_sal = group[group[max_col] > 0][max_col].max() if max_col else 0
         max_sal = max_sal if not (pd.isna(max_sal) or np.isnan(max_sal)) else 0
         
-        skills_col = 'tagsAndSkills' if 'tagsAndSkills' in group.columns else 'skills'
+        skills_col = 'skills' if 'skills' in group.columns else 'tagsAndSkills'
         dominant_skills = get_top_skills(group[skills_col]) if skills_col in group.columns else ""
         
         location_stats.append({
@@ -251,6 +262,7 @@ def get_top_hiring_locations(top_n=20) -> pd.DataFrame:
     return top_df.head(top_n).reset_index(drop=True)
 
 
+@lru_cache(maxsize=1)
 def get_top_high_paying_roles(top_n: int = 10, min_job_count: int = 1) -> pd.DataFrame:
     """Calculates top high paying job roles with accurate min/max salary ranges."""
     df = get_df()
@@ -266,15 +278,12 @@ def get_top_high_paying_roles(top_n: int = 10, min_job_count: int = 1) -> pd.Dat
 
     df_clean = df.copy()
 
-    # Convert numeric
-    df_clean['salary_avg'] = pd.to_numeric(df_clean[salary_col], errors='coerce').fillna(0)
-    
     # Check column aliases for minimum & maximum salary
     min_col = 'minimumSalary' if 'minimumSalary' in df_clean.columns else ('salary_min' if 'salary_min' in df_clean.columns else None)
     max_col = 'maximumSalary' if 'maximumSalary' in df_clean.columns else ('salary_max' if 'salary_max' in df_clean.columns else None)
 
-    df_clean['sal_min'] = pd.to_numeric(df_clean[min_col], errors='coerce').fillna(0) if min_col else 0.0
-    df_clean['sal_max'] = pd.to_numeric(df_clean[max_col], errors='coerce').fillna(0) if max_col else 0.0
+    df_clean['sal_min'] = df_clean[min_col] if min_col else 0.0
+    df_clean['sal_max'] = df_clean[max_col] if max_col else 0.0
 
     # Filter rows with salary > 0
     df_clean = df_clean[df_clean['salary_avg'] > 0]
@@ -282,7 +291,7 @@ def get_top_high_paying_roles(top_n: int = 10, min_job_count: int = 1) -> pd.Dat
     if df_clean.empty:
         return pd.DataFrame()
 
-    job_col = 'jobId' if 'jobId' in df_clean.columns else df_clean.columns[0]
+    job_col = 'jobId' if 'jobId' in df_clean.columns else ('job_id' if 'job_id' in df_clean.columns else df_clean.columns[0])
     grouped = df_clean.groupby(role_col)
     
     roles_df = grouped.agg(
@@ -310,22 +319,14 @@ def get_top_high_paying_roles(top_n: int = 10, min_job_count: int = 1) -> pd.Dat
     return roles_df
 
 
-
-
-
-
 # ==========================================
-# SKILL NETWORK GRAPH GENERATOR
+# SKILL NETWORK GRAPH GENERATOR (OPTIMIZED)
 # ==========================================
-from itertools import combinations
-import networkx as nx
-from pyvis.network import Network
-
+@lru_cache(maxsize=1)
 def get_skill_network_html(top_n_skills: int = 22) -> str:
-    """Generates a PyVis 360-degree rotating network graph with a modern dark GUI card."""
+    """Generates PyVis Network graph HTML (LRU Cached to prevent memory spike)."""
     df = get_df()
     
-    # Identify skills column
     skills_col = "skills" if "skills" in df.columns else ("tagsAndSkills" if "tagsAndSkills" in df.columns else None)
     if not skills_col or df.empty:
         return "<div style='color:white;'>No skill data available for network graph.</div>"
@@ -333,10 +334,9 @@ def get_skill_network_html(top_n_skills: int = 22) -> str:
     job_skills_list = []
     skill_freq = Counter()
     
-    # Process skills safely
     for skills_str in df[skills_col].dropna():
         cleaned = clean_skill_string(str(skills_str))
-        skills = list(set([s.strip().title() for s in re.split(r'[,;|\n\r\t]', cleaned) if len(s.strip()) >= 2 and len(s.strip()) <= 35]))
+        skills = list(set([s.strip().title() for s in re.split(r'[,;|\n\r\t]', cleaned) if 2 <= len(s.strip()) <= 35]))
         for s in skills:
             skill_freq[s] += 1
         job_skills_list.append(skills)
@@ -344,14 +344,12 @@ def get_skill_network_html(top_n_skills: int = 22) -> str:
     top_skills = [s for s, c in skill_freq.most_common(top_n_skills)]
     top_skills_set = set(top_skills)
 
-    # Co-occurrence calculation
     pair_counts = Counter()
     for skills in job_skills_list:
         filtered = [s for s in skills if s in top_skills_set]
         if len(filtered) > 1:
             pair_counts.update(combinations(sorted(filtered), 2))
 
-    # NetworkX Graph
     G = nx.Graph()
     for skill in top_skills:
         G.add_node(skill, frequency=skill_freq[skill])
@@ -365,7 +363,6 @@ def get_skill_network_html(top_n_skills: int = 22) -> str:
 
     max_f = max([G.nodes[n]['frequency'] for n in G.nodes()])
     
-    # Assign Tiers
     tier_map = {}
     tier_groups = {1: [], 2: [], 3: []}
     for node in G.nodes():
@@ -379,10 +376,8 @@ def get_skill_network_html(top_n_skills: int = 22) -> str:
         tier_map[node] = level
         tier_groups[level].append(node)
 
-    # PyVis Network Init
     net = Network(height="620px", width="100%", bgcolor="#0F172A", font_color="#FFFFFF", cdn_resources='in_line')
     
-    # Add Nodes
     for node in G.nodes():
         node_level = tier_map[node]
         freq = G.nodes[node]['frequency']
@@ -396,7 +391,7 @@ def get_skill_network_html(top_n_skills: int = 22) -> str:
         net.add_node(
             node, 
             label=node, 
-            title="",  # Disables default browser tooltip
+            title="",
             size=node_size,
             color={
                 'background': base_color,
@@ -411,11 +406,9 @@ def get_skill_network_html(top_n_skills: int = 22) -> str:
             conn_skills=", ".join(conn_skills[:5]) if conn_skills else "None"
         )
 
-    # Add Edges
     for s1, s2, data in G.edges(data=True):
         net.add_edge(s1, s2, value=data['weight'], color={'color': 'rgba(148, 163, 184, 0.25)', 'highlight': '#00FFCC'})
 
-    # Custom Options
     net.set_options("""
     var options = {
       "nodes": {
@@ -445,7 +438,6 @@ def get_skill_network_html(top_n_skills: int = 22) -> str:
 
     html_content = net.generate_html()
 
-    # MODERN GLASSMORPHISM GUI + CONTINUOUS 360 ROTATION INJECTION
     custom_gui_and_rotation = """
     <div id="modern-gui-card" style="
         position: absolute;
@@ -546,6 +538,5 @@ def get_skill_network_html(top_n_skills: int = 22) -> str:
     </script>
     </body>
     """
-    
     
     return html_content.replace("</body>", custom_gui_and_rotation)
