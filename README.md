@@ -15,8 +15,8 @@
 Built with **FastAPI** (backend/API) + **Streamlit** (multi-page frontend) + **Groq LLM (Llama 3.3 70B)** for resume-based salary intelligence.
 
 ---
-
-## 🖼️ Screenshots
+🔗 **Live Demo:** [Click Here to View Live App](https://job-salary-predictor-ds.streamlit.app)
+⚙️ **Backend API:** [Live Render Backend](https://job-salary-predictor-backend.onrender.com)
 
 <!--
 Add your screenshots to a `screenshots/` folder in the repo root, then update the
