@@ -328,7 +328,7 @@ render_top_locations_section()
 
 st.markdown("---")
 # =========================================================
-# SECTION 4: TOP HIGH PAYING JOB ROLES (FIXED)
+# SECTION 4: TOP HIGH PAYING JOB ROLES
 # =========================================================
 def render_top_high_paying_roles_section():
     st.markdown("### 💼 Feature 2.3: Top High Paying Job Roles")
@@ -387,7 +387,6 @@ def render_top_high_paying_roles_section():
 
     display_df = top_roles_df[['rank', 'job_title_normalized', 'salary_avg', 'salary_median', 'job_count', 'salary_range']].copy()
     
-    # 🟢 FIX: Formatted with standard pandas styler (without requiring matplotlib)
     styled_df = display_df.style.format({
         'salary_avg': '₹{:,.2f}',
         'salary_median': '₹{:,.2f}',
@@ -408,3 +407,36 @@ def render_top_high_paying_roles_section():
         hide_index=True,
         height=380
     )
+
+
+# =========================================================
+# SECTION 5: NETWORK SKILL ECOSYSTEM
+# =========================================================
+def render_skill_ecosystem_network():
+    st.markdown("---")
+    st.header("🕸️ Network Skill Ecosystem")
+    st.markdown("Explore co-occurring skills, demand tiers, and skill clusters in interactive continuous 360° rotation.")
+
+    col_net1, col_net2 = st.columns([3, 1])
+    with col_net1:
+        st.caption("💡 Hover or click any skill node to reveal connected skills & demand tier in the dark GUI panel.")
+    with col_net2:
+        net_skills_count = st.slider("Max Skill Nodes:", min_value=10, max_value=40, value=22, key="network_nodes_slider")
+
+    network_html = None
+    if hasattr(api, 'get_skill_network_html'):
+        network_html = api.get_skill_network_html(top_n=net_skills_count)
+
+    if network_html:
+        components.html(network_html, height=640, scrolling=False)
+    else:
+        try:
+            from backend import data_loader as dl
+            fallback_html = dl.get_skill_network_html(top_n_skills=net_skills_count)
+            components.html(fallback_html, height=640, scrolling=False)
+        except Exception as e:
+            st.error(f"⚠️ Unable to render Skill Ecosystem Network: {e}")
+
+# Explicit Execution
+render_top_high_paying_roles_section()
+render_skill_ecosystem_network()

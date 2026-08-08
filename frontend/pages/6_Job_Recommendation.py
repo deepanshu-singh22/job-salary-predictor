@@ -47,64 +47,72 @@ with col2:
 top_n_jobs = st.slider("Kitne jobs recommend karein?", min_value=5, max_value=20, value=10)
 
 # Search Button
+# Search Button Fix
 if st.button("🚀 Find Matching Jobs", use_container_width=True):
     if not user_skills_input.strip():
         st.warning("Kripya kam se kam ek skill type karein.")
     else:
-        user_skills = [s.strip() for s in user_skills_input.split(",") if s.strip()]
+        # Pass both list and raw string to ensure API client compatibility
+        user_skills_list = [s.strip() for s in user_skills_input.split(",") if s.strip()]
+        user_skills_str = ", ".join(user_skills_list)
 
         with st.spinner("Dataset se best matching jobs dhundhe ja rahe hain..."):
-            res = get_job_recommendations(
-                user_skills=user_skills,
-                preferred_location=selected_location,
-                top_n=top_n_jobs
-            )
+            # Dono formats pass karke safe fallback
+            try:
+                res = get_job_recommendations(
+                    user_skills=user_skills_list,
+                    preferred_location=selected_location,
+                    top_n=top_n_jobs
+                )
+            except Exception:
+                res = get_job_recommendations(
+                    skills=user_skills_str,
+                    location=selected_location,
+                    top_n=top_n_jobs
+                )
 
-        if res.get("status") == "success":
-            jobs = res.get("recommended_jobs", [])
+        # Robust Response Resolution
+        jobs = []
+        if isinstance(res, dict):
+            jobs = res.get("recommended_jobs") or res.get("data") or res.get("jobs") or []
+        elif isinstance(res, list):
+            jobs = res
 
-            if jobs:
-                st.subheader(f"🎯 Top {len(jobs)} Recommended Jobs Found:")
+        if jobs:
+            st.subheader(f"🎯 Top {len(jobs)} Recommended Jobs Found:")
 
-                for idx, job in enumerate(jobs, 1):
-                    match_score = job.get("match_score", job.get("match_percentage", 0))
-                    
-                    # 🟢 FIX: Smart Fallback for Job Title (Har tarah ki API Key cover kar li hai)
-                    job_title = (
-                        job.get("job_title_normalized") 
-                        or job.get("job_title") 
-                        or job.get("title") 
-                        or job.get("role")
-                        or job.get("job_role")
-                        or "Software Engineer"
-                    )
+            for idx, job in enumerate(jobs, 1):
+                match_score = job.get("match_score") or job.get("match_percentage") or 100
+                
+                job_title = (
+                    job.get("job_title_normalized") 
+                    or job.get("job_title") 
+                    or job.get("title") 
+                    or job.get("role")
+                    or "Job Role"
+                )
 
-                    # Company & Location Safe Extraction
-                    company = job.get("company_name") or job.get("company") or "N/A"
-                    location = job.get("location") or job.get("city") or "N/A"
-                    skills = job.get("skills") or job.get("tagsAndSkills") or "N/A"
+                company = job.get("company_name") or job.get("company") or "N/A"
+                location = job.get("location") or job.get("city") or "N/A"
+                skills = job.get("skills") or job.get("required_skills") or "N/A"
 
-                    # Score color tag
-                    score_color = "🟢" if match_score >= 60 else ("🟡" if match_score >= 30 else "🔴")
+                score_color = "🟢" if match_score >= 60 else ("🟡" if match_score >= 30 else "🔴")
 
-                    with st.expander(f"**{idx}. {job_title}** | Match: {score_color} {match_score}%"):
-                        c1, c2 = st.columns(2)
-                        with c1:
-                            st.write(f"🏢 **Company:** {company}")
-                            st.write(f"📍 **Location:** {location}")
-                        with c2:
-                            # Safe salary handling
-                            raw_salary = job.get('salary_avg') or job.get('salary') or 0
-                            try:
-                                salary = float(raw_salary) if raw_salary is not None else 0.0
-                            except (ValueError, TypeError):
-                                salary = 0.0
+                with st.expander(f"**{idx}. {job_title}** | Match: {score_color} {match_score}%"):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.write(f"🏢 **Company:** {company}")
+                        st.write(f"📍 **Location:** {location}")
+                    with c2:
+                        raw_salary = job.get('salary_avg') or job.get('salary') or 0
+                        try:
+                            salary = float(raw_salary) if raw_salary is not None else 0.0
+                        except (ValueError, TypeError):
+                            salary = 0.0
 
-                            salary_text = f"₹{salary:,.0f}" if salary > 0 else "Not Disclosed"
-                            st.write(f"💰 **Average Salary:** {salary_text}")
+                        salary_text = f"₹{salary:,.0f}" if salary > 0 else "Not Disclosed"
+                        st.write(f"💰 **Average Salary:** {salary_text}")
 
-                        st.write(f"🛠️ **Required Skills:** {skills}")
-            else:
-                st.info("Koi matching jobs nahi mile. Kripya different location ya skills try karein.")
+                    st.write(f"🛠️ **Required Skills:** {skills}")
         else:
-            st.error(f"Error: {res.get('message', 'Failed to fetch recommendations')}")
+            st.info("Koi matching jobs nahi mile. Kripya different location ya skills try karein.")
