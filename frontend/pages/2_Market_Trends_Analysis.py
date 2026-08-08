@@ -408,9 +408,8 @@ def render_top_high_paying_roles_section():
         height=380
     )
 
-
 # =========================================================
-# SECTION 5: NETWORK SKILL ECOSYSTEM
+# SECTION 5: NETWORK SKILL ECOSYSTEM (FIXED IMPORT)
 # =========================================================
 def render_skill_ecosystem_network():
     st.markdown("---")
@@ -423,14 +422,27 @@ def render_skill_ecosystem_network():
     with col_net2:
         net_skills_count = st.slider("Max Skill Nodes:", min_value=10, max_value=40, value=22, key="network_nodes_slider")
 
+    # 🟢 FIX: Backend and Root paths ko sys.path me add kar rahe hain taaki 'import config' fail na ho
+    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    BACKEND_DIR = os.path.join(ROOT_DIR, "backend")
+    
+    if ROOT_DIR not in sys.path:
+        sys.path.insert(0, ROOT_DIR)
+    if BACKEND_DIR not in sys.path:
+        sys.path.insert(0, BACKEND_DIR)
+
     network_html = None
     if hasattr(api, 'get_skill_network_html'):
-        network_html = api.get_skill_network_html(top_n=net_skills_count)
+        try:
+            network_html = api.get_skill_network_html(top_n=net_skills_count)
+        except Exception:
+            network_html = None
 
     if network_html:
         components.html(network_html, height=640, scrolling=False)
     else:
         try:
+            # Direct backend import with path fix
             from backend import data_loader as dl
             fallback_html = dl.get_skill_network_html(top_n_skills=net_skills_count)
             components.html(fallback_html, height=640, scrolling=False)
