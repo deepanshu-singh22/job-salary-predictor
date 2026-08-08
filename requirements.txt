@@ -5,3 +5,9 @@ groq
 python-dotenv
 pyvis
 networkx
+plotly
+requests
+httpx
+fastapi
+uvicorn
+scikit-learn
