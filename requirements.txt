@@ -11,3 +11,4 @@ httpx
 fastapi
 uvicorn
 scikit-learn
+pypdf
