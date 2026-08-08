@@ -15,6 +15,7 @@ import numpy as np
 import plotly.express as px
 import streamlit as st
 import folium
+import networkx as nx
 import streamlit.components.v1 as components
 
 # MUST BE THE FIRST STREAMLIT COMMAND IN THE SCRIPT!

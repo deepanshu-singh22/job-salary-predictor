@@ -14,3 +14,5 @@ scikit-learn
 pypdf
 folium
 streamlit-folium
+networkx>=2.6
+pyvis>=0.3.1
