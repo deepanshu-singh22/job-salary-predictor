@@ -101,10 +101,9 @@ def get_top_high_paying_roles(top_n=10):
     return pd.DataFrame(sample_roles)
 
 
-
 def get_skill_network_html(top_n=22):
     try:
-        res = requests.get(f"{API_BASE_URL}/api/skills/network?top_n={top_n}")
+        res = requests.get(f"{API_BASE_URL}/api/skills/network?top_n_skills={top_n}")
         if res.status_code == 200:
             return res.text
     except Exception as e:

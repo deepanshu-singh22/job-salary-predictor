@@ -331,7 +331,7 @@ def get_top_high_paying_roles(top_n: int = 10, min_job_count: int = 1) -> pd.Dat
 # ==========================================
 # SKILL NETWORK GRAPH GENERATOR (OPTIMIZED)
 # ==========================================
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=4)
 def get_skill_network_html(top_n_skills: int = 22) -> str:
     """Generates PyVis Network graph HTML (LRU Cached to prevent memory spike)."""
     df = get_df()

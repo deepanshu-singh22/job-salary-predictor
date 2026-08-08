@@ -412,9 +412,8 @@ def render_top_high_paying_roles_section():
         hide_index=True,
         height=380
     )
-
-# # =========================================================
-# SECTION 5: NETWORK SKILL ECOSYSTEM (FIXED)
+# =========================================================
+# SECTION 5: NETWORK SKILL ECOSYSTEM (FINAL INTEGRATION)
 # =========================================================
 def render_skill_ecosystem_network():
     st.markdown("---")
@@ -436,7 +435,7 @@ def render_skill_ecosystem_network():
         except Exception:
             network_html = None
 
-    # Attempt 2: Direct Local Backend Imports (Multi-fallback for imports)
+    # Attempt 2: Direct Local Import Fallback
     if not network_html:
         try:
             import data_loader as dl
@@ -451,6 +450,6 @@ def render_skill_ecosystem_network():
     if network_html:
         components.html(network_html, height=640, scrolling=False)
 
-# Explicit Execution
+# Clean Execution Sequence at the end of market_analysis.py
 render_top_high_paying_roles_section()
 render_skill_ecosystem_network()
