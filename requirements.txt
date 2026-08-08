@@ -12,3 +12,5 @@ fastapi
 uvicorn
 scikit-learn
 pypdf
+folium
+streamlit-folium

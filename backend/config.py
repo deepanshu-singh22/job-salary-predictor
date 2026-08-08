@@ -1,18 +1,13 @@
-"""
-Central config for the Job Market Intelligence backend.
-Apna raw dataset ka path aur actual column names yahan set karo.
-"""
-
 import os
 
-DATA_PATH = os.environ.get("DATA_PATH", "jobs_dataset_final.csv")
+# Base directory (backend folder) ka path dynamically set karein:
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Absolute Path set karein taaki Render/Streamlit kahin se bhi file dhoond sake
+DATA_PATH = os.environ.get("DATA_PATH", os.path.join(BASE_DIR, "jobs_dataset_final.csv"))
 ROLE_SKILLS_DATA_PATH = DATA_PATH
 
-
-# Logical name -> actual column name in your CSV. Sirf VALUES edit karo.
-# Actual Dataset Column Name -> Cleaned/Standardized Name
-# config.py
-
+# Logical name -> actual column name in your CSV
 COLUMNS = {
     "job_id": "job_id",
     "title": "job_title",
@@ -30,4 +25,5 @@ COLUMNS = {
     "jobDescription": "job_description",
     "jobUploaded": "job_uploaded"
 }
+
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "0"))
