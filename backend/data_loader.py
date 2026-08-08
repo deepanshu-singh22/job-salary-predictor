@@ -20,7 +20,9 @@ import numpy as np
 from collections import Counter
 from functools import lru_cache
 from itertools import combinations
+import networkx as nx
 from pyvis.network import Network
+# from pyvis.network import Network
 
 import config
 from config import ROLE_SKILLS_DATA_PATH
