@@ -25,7 +25,6 @@ st.divider()
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    # 🟢 FIX: value khali kar di hai taaki pehle se kuch na aaye
     user_skills_input = st.text_input(
         "⚡ Enter Your Skills (Comma Separated):",
         value="",
@@ -37,8 +36,11 @@ with col2:
     # Fetch locations for dropdown from API
     locations_df = get_top_locations(top_n=50)
     location_list = ["All"]
-    if not locations_df.empty and "location" in locations_df.columns:
-        location_list += locations_df["location"].tolist()
+    if not locations_df.empty:
+        # Fallback for city / location keys
+        loc_col = "location" if "location" in locations_df.columns else ("city" if "city" in locations_df.columns else None)
+        if loc_col:
+            location_list += locations_df[loc_col].dropna().tolist()
 
     selected_location = st.selectbox("📍 Preferred Location:", location_list)
 
@@ -65,19 +67,34 @@ if st.button("🚀 Find Matching Jobs", use_container_width=True):
                 st.subheader(f"🎯 Top {len(jobs)} Recommended Jobs Found:")
 
                 for idx, job in enumerate(jobs, 1):
-                    match_score = job.get("match_score", 0)
+                    match_score = job.get("match_score", job.get("match_percentage", 0))
                     
+                    # 🟢 FIX: Smart Fallback for Job Title (Har tarah ki API Key cover kar li hai)
+                    job_title = (
+                        job.get("job_title_normalized") 
+                        or job.get("job_title") 
+                        or job.get("title") 
+                        or job.get("role")
+                        or job.get("job_role")
+                        or "Software Engineer"
+                    )
+
+                    # Company & Location Safe Extraction
+                    company = job.get("company_name") or job.get("company") or "N/A"
+                    location = job.get("location") or job.get("city") or "N/A"
+                    skills = job.get("skills") or job.get("tagsAndSkills") or "N/A"
+
                     # Score color tag
                     score_color = "🟢" if match_score >= 60 else ("🟡" if match_score >= 30 else "🔴")
 
-                    with st.expander(f"**{idx}. {job.get('job_title', 'Job Role')}** | Match: {score_color} {match_score}%"):
+                    with st.expander(f"**{idx}. {job_title}** | Match: {score_color} {match_score}%"):
                         c1, c2 = st.columns(2)
                         with c1:
-                            st.write(f"🏢 **Company:** {job.get('company_name', 'N/A')}")
-                            st.write(f"📍 **Location:** {job.get('location', 'N/A')}")
+                            st.write(f"🏢 **Company:** {company}")
+                            st.write(f"📍 **Location:** {location}")
                         with c2:
                             # Safe salary handling
-                            raw_salary = job.get('salary_avg', 0)
+                            raw_salary = job.get('salary_avg') or job.get('salary') or 0
                             try:
                                 salary = float(raw_salary) if raw_salary is not None else 0.0
                             except (ValueError, TypeError):
@@ -86,7 +103,7 @@ if st.button("🚀 Find Matching Jobs", use_container_width=True):
                             salary_text = f"₹{salary:,.0f}" if salary > 0 else "Not Disclosed"
                             st.write(f"💰 **Average Salary:** {salary_text}")
 
-                        st.write(f"🛠️ **Required Skills:** {job.get('skills', 'N/A')}")
+                        st.write(f"🛠️ **Required Skills:** {skills}")
             else:
                 st.info("Koi matching jobs nahi mile. Kripya different location ya skills try karein.")
         else:

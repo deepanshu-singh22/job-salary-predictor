@@ -327,9 +327,8 @@ def render_top_locations_section():
 render_top_locations_section()
 
 st.markdown("---")
-
 # =========================================================
-# SECTION 4: TOP HIGH PAYING JOB ROLES
+# SECTION 4: TOP HIGH PAYING JOB ROLES (FIXED)
 # =========================================================
 def render_top_high_paying_roles_section():
     st.markdown("### 💼 Feature 2.3: Top High Paying Job Roles")
@@ -347,9 +346,9 @@ def render_top_high_paying_roles_section():
     highest_demand = top_roles_df.sort_values(by='job_count', ascending=False).iloc[0]
 
     with col1:
-        st.metric("🥇 Top Paid Role", top_role['job_title_normalized'], f"₹{top_role['salary_avg']:,.2f} Avg")
+        st.metric("🥇 Top Paid Role", top_role.get('job_title_normalized', 'N/A'), f"₹{top_role.get('salary_avg', 0):,.2f} Avg")
     with col2:
-        st.metric("🔥 Most Active Role", highest_demand['job_title_normalized'], f"{highest_demand['job_count']:,} Jobs")
+        st.metric("🔥 Most Active Role", highest_demand.get('job_title_normalized', 'N/A'), f"{highest_demand.get('job_count', 0):,} Jobs")
     with col3:
         st.metric("📊 Total High-Pay Jobs", f"{top_roles_df['job_count'].sum():,} Openings")
 
@@ -388,62 +387,24 @@ def render_top_high_paying_roles_section():
 
     display_df = top_roles_df[['rank', 'job_title_normalized', 'salary_avg', 'salary_median', 'job_count', 'salary_range']].copy()
     
-    styled_df = display_df.style \
-        .format({
-            'salary_avg': '₹{:,.2f}',
-            'salary_median': '₹{:,.2f}',
-            'job_count': '{:,}'
-        }) \
-        .background_gradient(cmap='Blues', subset=['salary_avg']) \
-        .background_gradient(cmap='Greens', subset=['job_count'])
+    # 🟢 FIX: Formatted with standard pandas styler (without requiring matplotlib)
+    styled_df = display_df.style.format({
+        'salary_avg': '₹{:,.2f}',
+        'salary_median': '₹{:,.2f}',
+        'job_count': '{:,}'
+    })
 
     st.dataframe(
         styled_df,
         column_config={
-            "rank": "rank",
-            "job_title_normalized": "job_title_normalized",
-            "salary_avg": "salary_avg",
-            "salary_median": "salary_median",
-            "job_count": "job_count",
-            "salary_range": "salary_range"
+            "rank": "Rank",
+            "job_title_normalized": "Job Title",
+            "salary_avg": "Average Salary",
+            "salary_median": "Median Salary",
+            "job_count": "Job Openings",
+            "salary_range": "Salary Range"
         },
         use_container_width=True,
         hide_index=True,
         height=380
     )
-
-render_top_high_paying_roles_section()
-
-st.markdown("---")
-
-# =========================================================
-# SECTION 5 (LAST SECTION): NETWORK SKILL ECOSYSTEM
-# =========================================================
-def render_skill_ecosystem_network():
-    st.header("🕸️ Network Skill Ecosystem")
-    st.markdown("Explore co-occurring skills, demand tiers, and skill clusters in interactive continuous 360° rotation.")
-
-    col_net1, col_net2 = st.columns([3, 1])
-    with col_net1:
-        st.caption("💡 Hover or click any skill node to reveal connected skills & demand tier in the dark GUI panel.")
-    with col_net2:
-        net_skills_count = st.slider("Max Skill Nodes:", min_value=10, max_value=40, value=22, key="network_nodes_slider")
-
-    # API call se Network Graph HTML Fetch karna
-    network_html = None
-    if hasattr(api, 'get_skill_network_html'):
-        network_html = api.get_skill_network_html(top_n=net_skills_count)
-
-    if network_html:
-        components.html(network_html, height=640, scrolling=False)
-    else:
-        # Fallback agar direct backend load ki zarurat pade
-        try:
-            from backend import data_loader as dl
-            fallback_html = dl.get_skill_network_html(top_n_skills=net_skills_count)
-            components.html(fallback_html, height=640, scrolling=False)
-        except Exception as e:
-            st.error(f"⚠️ Unable to render Skill Ecosystem Network: {e}")
-
-# Render Network Skill Ecosystem Section at the end
-render_skill_ecosystem_network()
