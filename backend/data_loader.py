@@ -3,6 +3,15 @@ Loads and cleans the jobs dataset efficiently without exceeding Render's 512MB R
 handling malformed/quoted CSV lines, and exposing optimized helper functions for skills analysis.
 """
 
+import os
+import sys
+
+# Ensure backend directory is in sys.path so 'import config' works from anywhere
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
+# import config
 import time
 import csv
 import re

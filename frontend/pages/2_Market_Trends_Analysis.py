@@ -1,14 +1,14 @@
 import os
 import sys
 
-# Ensure ROOT_DIR, PAGES_DIR, and BACKEND_DIR are all in sys.path
+# Add project root and backend folder to sys.path
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(CURRENT_DIR) if "pages" in CURRENT_DIR else os.path.dirname(os.path.dirname(CURRENT_DIR))
 BACKEND_DIR = os.path.join(ROOT_DIR, "backend")
 
-for path in [ROOT_DIR, CURRENT_DIR, BACKEND_DIR]:
-    if path not in sys.path:
-        sys.path.insert(0, path)
+for p in [ROOT_DIR, BACKEND_DIR, CURRENT_DIR]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 import pandas as pd
 import numpy as np
